@@ -12,7 +12,7 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
     event Approval(address indexed owner, address indexed spender);
     event Mint(address indexed to, uint64 amount);
     event UserBalanceDecrypted(address indexed user, uint64 decryptedAmount);
-    struct StreamInfo{
+    struct StreamInfo {
         uint64 id;
         address from;
         address to;
@@ -39,17 +39,17 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
     }
 
     // Mint function to create tokens and add to the owner's balance
-    function mint(uint64 mintedAmount) public virtual{
+    function mint(uint64 mintedAmount) public virtual {
         balances[owner()] = TFHE.add(balances[owner()], mintedAmount);
         TFHE.allow(balances[owner()], address(this));
         TFHE.allow(balances[owner()], owner());
         _totalSupply += mintedAmount;
         emit Mint(owner(), mintedAmount);
     }
-    
+
     // Overloaded _mint function to allow encrypted token minting
     function _mint(einput encryptedAmount, bytes calldata inputProof) public virtual {
-        balances[msg.sender] = TFHE.add(balances[msg.sender], TFHE.asEuint64(encryptedAmount, inputProof)); 
+        balances[msg.sender] = TFHE.add(balances[msg.sender], TFHE.asEuint64(encryptedAmount, inputProof));
         TFHE.allow(balances[msg.sender], address(this));
         TFHE.allow(balances[msg.sender], owner());
         TFHE.allow(balances[msg.sender], msg.sender);
@@ -94,7 +94,12 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
     }
 
     // TransferFrom function for EOAs with encrypted inputs
-    function transferFrom(address from, address to, einput encryptedAmount, bytes calldata inputProof) public virtual returns (bool) {
+    function transferFrom(
+        address from,
+        address to,
+        einput encryptedAmount,
+        bytes calldata inputProof
+    ) public virtual returns (bool) {
         transferFrom(from, to, TFHE.asEuint64(encryptedAmount, inputProof));
         return true;
     }
@@ -173,18 +178,17 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
     }
 
     //start stream. openened stream which
-    function startStream(address to) public returns(uint64) {
+    function startStream(address to) public returns (uint64) {
         ID++;
-        streamMap[ID] = StreamInfo(ID, msg.sender, to, balances[msg.sender],1,block.timestamp);   
-        return ID;       
-
+        streamMap[ID] = StreamInfo(ID, msg.sender, to, balances[msg.sender], 1, block.timestamp);
+        return ID;
     }
 
-    function stopStream(uint64 id,einput encryptedAmount, bytes calldata inputProof) public returns(bool){
-        StreamInfo storage stream_info =streamMap[id];
-        require(msg.sender == stream_info.from, 'Only stream owner call');
+    function stopStream(uint64 id, einput encryptedAmount, bytes calldata inputProof) public returns (bool) {
+        StreamInfo storage stream_info = streamMap[id];
+        require(msg.sender == stream_info.from, "Only stream owner call");
 
-        uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp,stream_info.ratePerSecond);
+        uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp, stream_info.ratePerSecond);
         euint64 withdrawAmount = TFHE.asEuint64(encryptedAmount, inputProof);
 
         ebool isTransferPossible = TFHE.le(withdrawAmount, amountToSend);
@@ -192,16 +196,15 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
 
         delete streamMap[id];
         return true;
-
     }
 
-    function WithdrawFromStream(uint64 id, einput encryptedAmount, bytes calldata inputProof) public returns(bool){
-        StreamInfo storage stream_info =streamMap[id];
+    function WithdrawFromStream(uint64 id, einput encryptedAmount, bytes calldata inputProof) public returns (bool) {
+        StreamInfo storage stream_info = streamMap[id];
 
-        require(msg.sender == stream_info.to, 'Only stream receiver call');
-        require(stream_info.startTimeStamp >0,'Invalid Stream');
+        require(msg.sender == stream_info.to, "Only stream receiver call");
+        require(stream_info.startTimeStamp > 0, "Invalid Stream");
         // already streamed balance
-        uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp,stream_info.ratePerSecond);
+        uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp, stream_info.ratePerSecond);
         // setting new timestamp since till now is withdrawn by the user
         stream_info.startTimeStamp = block.timestamp;
 
@@ -211,18 +214,16 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
 
         _transfer(stream_info.from, stream_info.to, withdrawAmount, isTransferPossible);
         return true;
-
     }
 
-    function calculateStreamedBalance(uint256 timeStamp, uint64 ratePerSecond) internal view returns (uint64){
-        return uint64((block.timestamp-timeStamp) * ratePerSecond);
+    function calculateStreamedBalance(uint256 timeStamp, uint64 ratePerSecond) internal view returns (uint64) {
+        return uint64((block.timestamp - timeStamp) * ratePerSecond);
     }
 
-    function viewAlreadyStreamedBalance(uint64 id) public view returns(uint64){
+    function viewAlreadyStreamedBalance(uint64 id) public view returns (uint64) {
         StreamInfo storage stream_info = streamMap[id];
-        require(stream_info.startTimeStamp >0,'Invalid Stream');
-        require(msg.sender == stream_info.from || msg.sender ==stream_info.to, 'Only stream owners call');
-        return calculateStreamedBalance(stream_info.startTimeStamp,stream_info.ratePerSecond);
+        require(stream_info.startTimeStamp > 0, "Invalid Stream");
+        require(msg.sender == stream_info.from || msg.sender == stream_info.to, "Only stream owners call");
+        return calculateStreamedBalance(stream_info.startTimeStamp, stream_info.ratePerSecond);
     }
-    
 }

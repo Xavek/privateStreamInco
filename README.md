@@ -35,3 +35,19 @@ Users can mint the token(SUSD/Stream USD) both private and public via versions o
 **Stream Balance**
 - Only can be called by sender or receiver (`from` or `to`)
 - Returns the amount from `calculateStreamedBalance`
+
+
+**Run the Demo via tests**
+- A test file `ConfidentialERC20.ts` is there inside the test folder where the the test case `should mint to alice and starts the stream to bob and cancel and check bob balance` is present.
+    - This test mints the token to alice and alice starts the stream with receiver as bob.
+    - Waits for 5 block to be mined
+    - Alice (sender) cancels the streams by passing the stream ID and generated proof
+    - Bob gets the amount 5 units of token since the streamedBalance is timeElapsed * ratePerSecond (5*1)
+    - Bob balance is checked to confirm the balance via reencrypt
+
+- Clone the Repo
+- Inside the cloned `dir`. Run the command
+
+```
+pnpm test:rivest
+```
