@@ -5,12 +5,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
   const { deploy } = hre.deployments;
 
-  const deployed = await deploy("ConfidentialERC20", {
+  const deployed = await deploy("ConfidentialStreamERC20", {
     from: deployer,
     log: true,
   });
 
-  console.log(`ConfidentialToken contract deployed at: ${deployed.address}`);
+  console.log(`ConfidentialStreamToken contract deployed at: ${deployed.address}`);
 };
 
 export default func;

@@ -6,12 +6,22 @@ import "fhevm/lib/TFHE.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "fhevm/gateway/GatewayCaller.sol";
 
-contract ConfidentialERC20 is Ownable2Step, GatewayCaller {
+contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
     // Events for Transfer, Approval, Mint, and Decryption
     event Transfer(address indexed from, address indexed to);
     event Approval(address indexed owner, address indexed spender);
     event Mint(address indexed to, uint64 amount);
     event UserBalanceDecrypted(address indexed user, uint64 decryptedAmount);
+    struct StreamInfo{
+        uint64 id;
+        address from;
+        address to;
+        euint64 amount;
+        uint64 ratePerSecond;
+        uint256 startTimeStamp;
+    }
+    uint64 private ID;
+    mapping(uint64 => StreamInfo) internal streamMap;
 
     uint64 public _totalSupply;
     string public _name;
@@ -24,12 +34,12 @@ contract ConfidentialERC20 is Ownable2Step, GatewayCaller {
 
     // Constructor to set the token name, symbol, and owner
     constructor() Ownable(msg.sender) {
-        _name = "Confidential USD";
-        _symbol = "CUSD";
+        _name = "Stream USD";
+        _symbol = "SUSD";
     }
 
     // Mint function to create tokens and add to the owner's balance
-    function mint(uint64 mintedAmount) public virtual onlyOwner {
+    function mint(uint64 mintedAmount) public virtual{
         balances[owner()] = TFHE.add(balances[owner()], mintedAmount);
         TFHE.allow(balances[owner()], address(this));
         TFHE.allow(balances[owner()], owner());
@@ -38,7 +48,7 @@ contract ConfidentialERC20 is Ownable2Step, GatewayCaller {
     }
     
     // Overloaded _mint function to allow encrypted token minting
-    function _mint(einput encryptedAmount, bytes calldata inputProof) public virtual onlyOwner {
+    function _mint(einput encryptedAmount, bytes calldata inputProof) public virtual {
         balances[msg.sender] = TFHE.add(balances[msg.sender], TFHE.asEuint64(encryptedAmount, inputProof)); 
         TFHE.allow(balances[msg.sender], address(this));
         TFHE.allow(balances[msg.sender], owner());
@@ -161,4 +171,58 @@ contract ConfidentialERC20 is Ownable2Step, GatewayCaller {
         emit UserBalanceDecrypted(params[0], decryptedAmount);
         return true;
     }
+
+    //start stream. openened stream which
+    function startStream(address to) public returns(uint64) {
+        ID++;
+        streamMap[ID] = StreamInfo(ID, msg.sender, to, balances[msg.sender],1,block.timestamp);   
+        return ID;       
+
+    }
+
+    function stopStream(uint64 id,einput encryptedAmount, bytes calldata inputProof) public returns(bool){
+        StreamInfo storage stream_info =streamMap[id];
+        require(msg.sender == stream_info.from, 'Only stream owner call');
+
+        uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp,stream_info.ratePerSecond);
+        euint64 withdrawAmount = TFHE.asEuint64(encryptedAmount, inputProof);
+
+        ebool isTransferPossible = TFHE.le(withdrawAmount, amountToSend);
+        _transfer(stream_info.from, stream_info.to, withdrawAmount, isTransferPossible);
+
+        delete streamMap[id];
+        return true;
+
+    }
+
+    function WithdrawFromStream(uint64 id, einput encryptedAmount, bytes calldata inputProof) public returns(bool){
+        StreamInfo storage stream_info =streamMap[id];
+
+        require(msg.sender == stream_info.to, 'Only stream receiver call');
+        require(stream_info.startTimeStamp >0,'Invalid Stream');
+        // already streamed balance
+        uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp,stream_info.ratePerSecond);
+        // setting new timestamp since till now is withdrawn by the user
+        stream_info.startTimeStamp = block.timestamp;
+
+        euint64 withdrawAmount = TFHE.asEuint64(encryptedAmount, inputProof);
+        // withdraw amount must be less than or equal to already stremed amount
+        ebool isTransferPossible = TFHE.le(withdrawAmount, amountToSend);
+
+        _transfer(stream_info.from, stream_info.to, withdrawAmount, isTransferPossible);
+        return true;
+
+    }
+
+    function calculateStreamedBalance(uint256 timeStamp, uint64 ratePerSecond) internal view returns (uint64){
+        return uint64((block.timestamp-timeStamp) * ratePerSecond);
+    }
+
+    function viewAlreadyStreamedBalance(uint64 id) public view returns(uint64){
+        StreamInfo storage stream_info = streamMap[id];
+        require(stream_info.startTimeStamp >0,'Invalid Stream');
+        require(msg.sender == stream_info.from || msg.sender ==stream_info.to, 'Only stream owners call');
+        return calculateStreamedBalance(stream_info.startTimeStamp,stream_info.ratePerSecond);
+    }
+    
 }

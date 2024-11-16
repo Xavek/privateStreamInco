@@ -1,137 +1,37 @@
+Deployed contract address on Inco Rivest Testnet `0x93436463ce84dbE473ff4b2C9Ab732A43C0354f3`
 
-# Hardhat Template [![Open in Gitpod][gitpod-badge]][gitpod] [![Hardhat][hardhat-badge]][hardhat] [![License: MIT][license-badge]][license]
+#### Description
 
-[gitpod]: https://gitpod.io/#https://github.com/Inco-fhevm/fhevm-hardhat-template-rivest  
-[gitpod-badge]: https://img.shields.io/badge/Gitpod-Open%20in%20Gitpod-FFB45B?logo=gitpod  
-[gha]: https://github.com/Inco-fhevm/fhevm-hardhat-template-rivest/actions    
-[hardhat]: https://hardhat.org/  
-[hardhat-badge]: https://img.shields.io/badge/Built%20with-Hardhat-FFDB1C.svg  
-[license]: https://opensource.org/licenses/MIT  
-[license-badge]: https://img.shields.io/badge/License-MIT-blue.svg  
+Private streaming protocol on top of INCO network. Users would be
+able to stream any amount via the open-ended stream created from
+`startStream` function by providing just `to`. The protocol uses the confidentiality features via **TFHE** lib to keep the stream amount private. Only the sender and receiver is exposed but the amount and isActive of stream remains private. 
 
-A Hardhat-based template for developing Solidity smart contracts, complete with sensible defaults.
+##### Functions and Usage of TFHE
 
-- **Hardhat**: Compile, run, and test smart contracts.
-- **TypeChain**: Generate TypeScript bindings for smart contracts.
-- **Ethers**: Trusted Ethereum library and wallet implementation.
-- **Solhint**: Solidity code linter.
-- **Solcover**: Code coverage tool.
-- **Prettier Plugin Solidity**: Code formatter.
+The contract `ConfidentaialStreamERC20.sol` gets extended with new
+functions such as `startStream`, `stopStream`, `WithdrawFromStream` and `viewAlreadyStreamedBalance` 
 
-## Getting Started
+Users can mint the token(SUSD/Stream USD) both private and public via versions of `mint`. 
 
-Click the [`Use this template`](https://github.com/Inco-fhevm/fhevm-hardhat-template-rivest/generate) button to create a new repository from this template.
+**Stream Creation**
+- Sender calls the `startStream` with just the `to` 
+- Stream gets started with ratePerSecond of 1 unit i.e. in 10 seconds 10 units of tokens would be streamed to `to`.
+- Only sender can cancel the stream via `stopStream` 
 
-## Features
+**Withdraw From Stream**
+- `to` set by the sender can call this function
+- must provide the amount in `encryptedAmount` and `inputProof`
+- The amount is retrived in the form of `euint64` using `TFHE.le` and checked if the amount intended to withdraw falls below or equal to amount already streamed and transfer is made.
+- block.timestamp is updated in mapping to be consistent with withdraw amount and time calculation
 
-This template integrates popular frameworks and libraries. For more details, refer to their respective documentation:
+**CalculateStreamedBalance**
+- It's the `mul` of `timeElapsed(startTimestamp-now) * ratePerSecond`
 
-- [Hardhat Tutorial](https://hardhat.org/tutorial) and [Docs](https://hardhat.org/docs).
-- Check out the [Testing Contracts](https://hardhat.org/tutorial/testing-contracts) section in Hardhat’s tutorial.
+**Stop Stream**
+- Only sender can call and it transfers the already streamed balance and clears the mapping of streams.
+- must provide the amount in `encryptedAmount` and `inputProof`
+- The amount is retrived in the form of `euint64` using `TFHE.le` and checked if the amount intended to withdraw falls below or equal to amount already streamed and transfer is made.
 
-### Sensible Defaults
-
-Default configuration files included:
-
-```text
-├── .editorconfig
-├── .gitignore
-├── .prettierignore
-├── .prettierrc.yml
-├── .solcover.js
-├── .solhint.json
-└── hardhat.config.ts
-```
-
-### GitHub Actions
-
-GitHub Actions are pre-configured for this template. Contracts are linted and tested on each push and pull request to the `main` branch.
-
-To enable CI, set `INFURA_API_KEY` and `MNEMONIC` as GitHub secrets. The CI script is located at [.github/workflows/ci.yml](./.github/workflows/ci.yml).
-
-## Usage
-
-### Prerequisites
-
-Install [pnpm](https://pnpm.io/installation). To get started, create a `.env` file and set a BIP-39 compatible mnemonic as an environment variable.
-
-```sh
-cp .env.example .env
-```
-
-If you don’t have a mnemonic, generate one [here](https://iancoleman.io/bip39/).
-
-Next, install dependencies (requires Node v20 or newer):
-
-```sh
-pnpm install
-```
-
-### Development on Rivest Testnet
-
-Run the pre-launch script to set up the environment:
-
-```sh
-sh pre-launch.sh
-```
-
-This generates necessary precompile ABI files. 
-
-Compile contracts with Hardhat:
-
-```sh
-pnpm compile
-```
-
-Deploy contracts on the Rivest network:
-
-```sh
-pnpm deploy:contracts --network rivest
-```
-
-Run tests on the Rivest network:
-
-```sh
-pnpm test:rivest
-```
-
-### Development on Local Docker Setup
-
-Install [Docker](https://docs.docker.com/engine/install/).
-
-Start fhEVM
-During installation (see previous section) we recommend you for easier setup to not change the default .env : simply copy the original .env.example file to a new .env file in the root of the repo.
-
-Then, start a local fhEVM docker compose that inlcudes everything needed to deploy FHE encrypted smart contracts using:
-
-```sh
-pnpm fhevm:start
-```
-
-The initial setup takes 2–3 minutes. Wait until blockchain logs appear to confirm completion.
-
-Run tests in a new terminal:
-
-```sh
-pnpm test
-```
-
-Stop the node after testing:
-
-```sh
-pnpm fhevm:stop
-```
-
-Clean up artifacts, coverage reports, and cache:
-
-```sh
-pnpm clean
-```
-
-## Resources
-
-- **Block Explorer**: [https://explorer.rivest.inco.org/](https://explorer.rivest.inco.org/)
-- **Faucet**: [https://faucet.rivest.inco.org/](https://faucet.rivest.inco.org/)
-- **RPC Endpoint**: [https://validator.rivest.inco.org](https://validator.rivest.inco.org)
-- **Gateway Endpoint**: [https://gateway.rivest.inco.org](https://gateway.rivest.inco.org)
-
+**Stream Balance**
+- Only can be called by sender or receiver (`from` or `to`)
+- Returns the amount from `calculateStreamedBalance`
