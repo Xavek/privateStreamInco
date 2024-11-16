@@ -200,9 +200,8 @@ contract ConfidentialStreamERC20 is Ownable2Step, GatewayCaller {
 
     function WithdrawFromStream(uint64 id, einput encryptedAmount, bytes calldata inputProof) public returns (bool) {
         StreamInfo storage stream_info = streamMap[id];
-
-        require(msg.sender == stream_info.to, "Only stream receiver call");
         require(stream_info.startTimeStamp > 0, "Invalid Stream");
+        require(msg.sender == stream_info.to, "Only stream receiver call");
         // already streamed balance
         uint64 amountToSend = calculateStreamedBalance(stream_info.startTimeStamp, stream_info.ratePerSecond);
         // setting new timestamp since till now is withdrawn by the user

@@ -45,7 +45,15 @@ Users can mint the token(SUSD/Stream USD) both private and public via versions o
     - Bob gets the amount 5 units of token since the streamedBalance is timeElapsed * ratePerSecond (5*1)
     - Bob balance is checked to confirm the balance via reencrypt
 
-- Clone the Repo
+- A test case `should mint to alice and starts the stream to bob and bob withdraws` is present which
+    - Mints the token to alice and alice starts the stream with receiver as bob
+    - Waits for 10 block to be mined
+    - Bob withdraws
+    - Bob balance is checked i.e timeEplapsed * ratePerSecond (5 * 1)
+
+- A test cases for the revert condition also there which should be revert on call like stream creator wants to withdraw(only receiver can call) and check stream balance which only stream sender and receiver can call
+
+- To run the full tests clone the Repo
 - Inside the cloned `dir`. Run the command
 
 ```

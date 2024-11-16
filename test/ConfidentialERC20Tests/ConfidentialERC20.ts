@@ -218,28 +218,6 @@ describe("Confidential ERC20 tests", function () {
 
     await transaction.wait();
 
-    //Reencrypt Alice's balance
-    const balanceHandleAlice = await this.erc20.balanceOf(this.signers.alice.address);
-    const { publicKey: publicKeyAlice, privateKey: privateKeyAlice } = this.instances.alice.generateKeypair();
-    const eip712 = this.instances.alice.createEIP712(publicKeyAlice, this.contractAddress);
-    const signatureAlice = await this.signers.alice.signTypedData(
-      eip712.domain,
-      { Reencrypt: eip712.types.Reencrypt },
-      eip712.message,
-    );
-    const balanceAlice = await this.instances.alice.reencrypt(
-      balanceHandleAlice,
-      privateKeyAlice,
-      publicKeyAlice,
-      signatureAlice.replace("0x", ""),
-      this.contractAddress,
-      this.signers.alice.address,
-    );
-    expect(balanceAlice).to.equal(1000);
-
-    const totalSupply = await this.erc20._totalSupply();
-    expect(totalSupply).to.equal(1000);
-
     const startStreamTransaction = await this.erc20.startStream(this.signers.bob.address);
     await startStreamTransaction.wait();
 
@@ -275,5 +253,103 @@ describe("Confidential ERC20 tests", function () {
       this.signers.bob.address,
     );
     expect(balanceBob).to.equal(5);
+  });
+
+  // This time the timeElpased is 5 sec so the withdrawable amount is 5 sec *1 5units of tokens
+  it("should mint to alice and starts the stream to bob and bob withdraws", async function () {
+    const transaction = await this.erc20.mint(1000);
+
+    await transaction.wait();
+    const balanceHandleAlice = await this.erc20.balanceOf(this.signers.alice.address);
+    const { publicKey: publicKeyAlice, privateKey: privateKeyAlice } = this.instances.alice.generateKeypair();
+    const eip712 = this.instances.alice.createEIP712(publicKeyAlice, this.contractAddress);
+    const signatureAlice = await this.signers.alice.signTypedData(
+      eip712.domain,
+      { Reencrypt: eip712.types.Reencrypt },
+      eip712.message,
+    );
+    const balanceAlice = await this.instances.alice.reencrypt(
+      balanceHandleAlice,
+      privateKeyAlice,
+      publicKeyAlice,
+      signatureAlice.replace("0x", ""),
+      this.contractAddress,
+      this.signers.alice.address,
+    );
+    expect(balanceAlice).to.equal(1000);
+
+    const totalSupply = await this.erc20._totalSupply();
+    expect(totalSupply).to.equal(1000);
+
+    const startStreamTransaction = await this.erc20.startStream(this.signers.bob.address);
+    await startStreamTransaction.wait();
+    // increase the time stamp
+    waitNBlocks(5);
+    const input = this.instances.alice.createEncryptedInput(this.contractAddress, this.signers.bob.address);
+    input.add64(5);
+    const encryptedTransferAmount = input.encrypt();
+    const tx = await this.erc20
+      .connect(this.signers.bob)
+      ["WithdrawFromStream(uint64,bytes32,bytes)"](
+        1,
+        encryptedTransferAmount.handles[0],
+        encryptedTransferAmount.inputProof,
+      );
+    const t2 = await tx.wait();
+    expect(t2?.status).to.eq(1);
+
+    // Reencrypt Bob's balance
+    const balanceHandleBob = await this.erc20.balanceOf(this.signers.bob);
+
+    const { publicKey: publicKeyBob, privateKey: privateKeyBob } = this.instances.bob.generateKeypair();
+    const eip712Bob = this.instances.bob.createEIP712(publicKeyBob, this.contractAddress);
+    const signatureBob = await this.signers.bob.signTypedData(
+      eip712Bob.domain,
+      { Reencrypt: eip712Bob.types.Reencrypt },
+      eip712Bob.message,
+    );
+    const balanceBob = await this.instances.bob.reencrypt(
+      balanceHandleBob,
+      privateKeyBob,
+      publicKeyBob,
+      signatureBob.replace("0x", ""),
+      this.contractAddress,
+      this.signers.bob.address,
+    );
+    expect(balanceBob).to.equal(5);
+  });
+
+  it("should revert as neither sender nor receiver call", async function () {
+    const transaction = await this.erc20.mint(1000);
+
+    await transaction.wait();
+
+    const startStreamTransaction = await this.erc20.startStream(this.signers.bob.address);
+    await startStreamTransaction.wait();
+    // increase the time stamp
+    waitNBlocks(20);
+    const checkStreamBalanceTx = await this.erc20.connect(this.signers.carol).viewAlreadyStreamedBalance(1);
+    const alreadyStreamdBalance = await checkStreamBalanceTx.wait();
+  });
+
+  it("should fail as alice starts and attempts to withdraw too", async function () {
+    const transaction = await this.erc20.mint(1000);
+
+    await transaction.wait();
+
+    const startStreamTransaction = await this.erc20.startStream(this.signers.bob.address);
+    await startStreamTransaction.wait();
+    // increase the time stamp
+    waitNBlocks(10);
+    const input = this.instances.alice.createEncryptedInput(this.contractAddress, this.signers.bob.address);
+    input.add64(10);
+    const encryptedTransferAmount = input.encrypt();
+    const tx = await this.erc20["WithdrawFromStream(uint64,bytes32,bytes)"](
+      1,
+      encryptedTransferAmount.handles[0],
+      encryptedTransferAmount.inputProof,
+    );
+    const t2 = await tx.wait();
+    await expect(tx).to.be.revertedWith("Only stream receiver call");
   });
 });
